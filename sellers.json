@@ -1,0 +1,54 @@
+[
+    {
+        "name": "anbhsf",
+        "shop": "ahfw",
+        "area": "ask",
+        "products": [
+            {
+                "name": "hdsfalc",
+                "size": "small",
+                "color": "red",
+                "quantity": "45353"
+            }
+        ]
+    },
+    {
+        "name": "hasd",
+        "shop": "ajsdfba",
+        "area": "jabf",
+        "products": [
+            {
+                "name": "dknfa",
+                "size": "small",
+                "color": "red",
+                "quantity": "2321"
+            }
+        ]
+    },
+    {
+        "name": "pra",
+        "shop": "dsa",
+        "area": "sdf",
+        "products": [
+            {
+                "name": "trt",
+                "size": "small",
+                "color": "red",
+                "quantity": "44"
+            }
+        ]
+    },
+    {
+        "name": "Prashant Karki",
+        "shop_name": "Prashant Karki",
+        "delivery_areas": [
+            "Kathmandu",
+            "Pokhara",
+            "Butwal"
+        ],
+        "product_types": [
+            "pants"
+        ],
+        "instagram_page": null
+    }
+]
