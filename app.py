@@ -22,8 +22,11 @@ class Seller(db.Model):
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(100), nullable=False)
+    gender = db.Column(db.String(20), nullable=False)
     size = db.Column(db.String(50), nullable=False)
     color = db.Column(db.String(50), nullable=False)
+    price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     seller_id = db.Column(db.Integer, db.ForeignKey("seller.id"), nullable=False)
 
@@ -39,6 +42,9 @@ class Order(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
     status = db.Column(db.String(50), nullable=False, default="pending")
     quantity = db.Column(db.Integer, nullable=False)
+
+with app.app_context():
+    db.create_all()
 
 @app.route("/")
 def home():
@@ -75,14 +81,82 @@ def add_product():
     data = request.get_json()
     new_product = Product(
         name=data["name"],
+        category=data["category"],
+        gender=data["gender"],
         size=data["size"],
         color=data["color"],
+        price=data["price"],
         quantity=data["quantity"],
         seller_id=seller_id
     )
     db.session.add(new_product)
     db.session.commit()
     return jsonify({"message": "Product added successfully!"})
+
+@app.route("/products")
+def get_products():
+    products = Product.query.all()
+    result = []
+    for product in products:
+        result.append({
+            "id": product.id,
+            "name": product.name,
+            "category": product.category,
+            "gender": product.gender,
+            "size": product.size,
+            "color": product.color,
+            "price": product.price,
+            "quantity": product.quantity,
+            "shop_name": product.seller.shop_name
+        })
+    return jsonify(result)
+
+@app.route("/products/search")
+def search_products():
+    search_term = request.args.get('q')
+    color = request.args.get('color')
+    size = request.args.get('size')
+    category = request.args.get('category')
+    gender = request.args.get('gender')
+    min_price = request.args.get('min_price')
+    max_price = request.args.get('max_price')
+
+    query = Product.query
+
+    if search_term:
+        query = query.filter(Product.name.like(f"%{search_term}%"))
+    if color:
+        query = query.filter(Product.color == color)
+    if size:
+        query = query.filter(Product.size == size)
+    if category:
+        query = query.filter(Product.category == category)
+    if gender:
+        query = query.filter(Product.gender == gender)
+    if min_price:
+        query = query.filter(Product.price >= float(min_price))
+    if max_price:
+        query = query.filter(Product.price <= float(max_price))
+
+    products = query.all()
+
+    if not products:
+        return jsonify({"message": "No products found"}), 404
+
+    result = []
+    for product in products:
+        result.append({
+            "id": product.id,
+            "name": product.name,
+            "category": product.category,
+            "gender": product.gender,
+            "size": product.size,
+            "color": product.color,
+            "price": product.price,
+            "quantity": product.quantity,
+            "shop_name": product.seller.shop_name
+        })
+    return jsonify(result)
 
 @app.route("/sellers")
 def get_sellers():
@@ -105,8 +179,11 @@ def get_seller_products(seller_id):
         result.append({
             "id": product.id,
             "name": product.name,
+            "category": product.category,
+            "gender": product.gender,
             "size": product.size,
             "color": product.color,
+            "price": product.price,
             "quantity": product.quantity
         })
     return jsonify(result)
@@ -138,24 +215,20 @@ def login_buyer():
 def place_order():
     buyer_id = get_jwt_identity()
     data = request.get_json()
-    
     product = Product.query.get(data["product_id"])
     if not product:
         return jsonify({"message": "Product not found"}), 404
     if product.quantity < data["quantity"]:
         return jsonify({"message": "Insufficient quantity available"}), 400
     product.quantity -= data["quantity"]
-
     new_order = Order(
         buyer_id=buyer_id,
         product_id=data["product_id"],
         quantity=data["quantity"]
     )
-
     db.session.add(new_order)
     db.session.commit()
     return jsonify({"message": "Order placed successfully!"})
-
 
 @app.route("/buyers/orders")
 @jwt_required()
@@ -178,22 +251,15 @@ def get_buyer_orders():
 def update_order_status(order_id):
     seller_id = get_jwt_identity()
     order = Order.query.get(order_id)
-    
     if not order:
         return jsonify({"message": "Order not found"}), 404
-    
     product = Product.query.get(order.product_id)
-    
     if product.seller_id != int(seller_id):
         return jsonify({"message": "Not authorized to update this order"}), 403
-    
     data = request.get_json()
     order.status = data["status"]
     db.session.commit()
     return jsonify({"message": "Order status updated successfully!"})
-
-with app.app_context():
-    db.create_all()
 
 if __name__ == "__main__":
     app.run(debug=True)
