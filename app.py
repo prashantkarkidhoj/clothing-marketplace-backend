@@ -1,3 +1,4 @@
+import os
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
@@ -5,7 +6,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///marketplace.db"
-app.config["JWT_SECRET_KEY"] = "your-secret-key-change-this"
+app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "fallback-secret")
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -262,4 +263,4 @@ def update_order_status(order_id):
     return jsonify({"message": "Order status updated successfully!"})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
