@@ -40,6 +40,9 @@ class Buyer(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+    is_seller = db.Column(db.Boolean, default=False)
+    shop_name = db.Column(db.String(100), nullable=True)
+    area = db.Column(db.String(200), nullable=True)
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -82,7 +85,12 @@ def login_seller():
 @app.route("/products/add", methods=["POST"])
 @jwt_required()
 def add_product():
-    seller_id = get_jwt_identity()
+    user_id = get_jwt_identity()
+    
+    buyer = Buyer.query.get(user_id)
+    if not buyer or not buyer.is_seller:
+        return jsonify({"message": "Seller account required"}), 403
+    
     data = request.get_json()
     new_product = Product(
         name=data["name"],
@@ -92,7 +100,7 @@ def add_product():
         color=data["color"],
         price=data["price"],
         quantity=data["quantity"],
-        seller_id=seller_id
+        seller_id=user_id
     )
     db.session.add(new_product)
     db.session.commit()
@@ -103,6 +111,7 @@ def get_products():
     products = Product.query.all()
     result = []
     for product in products:
+        seller = Buyer.query.get(product.seller_id)
         result.append({
             "id": product.id,
             "name": product.name,
@@ -112,7 +121,7 @@ def get_products():
             "color": product.color,
             "price": product.price,
             "quantity": product.quantity,
-            "shop_name": product.seller.shop_name
+            "shop_name": seller.shop_name if seller else "Unknown"
         })
     return jsonify(result)
 
@@ -265,6 +274,45 @@ def update_order_status(order_id):
     order.status = data["status"]
     db.session.commit()
     return jsonify({"message": "Order status updated successfully!"})
+
+@app.route("/become-seller", methods=["POST"])
+@jwt_required()
+def become_seller():
+    buyer_id = get_jwt_identity()
+    data = request.get_json()
+    
+    buyer = Buyer.query.get(buyer_id)
+    if not buyer:
+        return jsonify({"message": "User not found"}), 404
+    
+    buyer.is_seller = True
+    buyer.shop_name = data.get("shop_name")
+    buyer.area = data.get("area")
+    
+    db.session.commit()
+    
+    return jsonify({
+        "message": "Seller account activated!",
+        "shop_name": buyer.shop_name,
+        "area": buyer.area
+    })
+
+@app.route("/me")
+@jwt_required()
+def get_me():
+    buyer_id = get_jwt_identity()
+    buyer = Buyer.query.get(buyer_id)
+    if not buyer:
+        return jsonify({"message": "User not found"}), 404
+    
+    return jsonify({
+        "id": buyer.id,
+        "name": buyer.name,
+        "email": buyer.email,
+        "is_seller": buyer.is_seller,
+        "shop_name": buyer.shop_name,
+        "area": buyer.area
+    })
 
 if __name__ == "__main__":
     app.run(debug=False)
