@@ -20,14 +20,14 @@ bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
 
-class Seller(db.Model):
+class Buyer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    shop_name = db.Column(db.String(100), nullable=False)
-    area = db.Column(db.String(200), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    products = db.relationship("Product", backref="seller", lazy=True)
+    is_seller = db.Column(db.Boolean, default=False)
+    shop_name = db.Column(db.String(100), nullable=True)
+    area = db.Column(db.String(200), nullable=True)
 
 
 class Product(db.Model):
@@ -35,8 +35,8 @@ class Product(db.Model):
     name = db.Column(db.String(100), nullable=False)
     category = db.Column(db.String(100), nullable=False)
     gender = db.Column(db.String(20), nullable=False)
-    size = db.Column(db.String(50), nullable=False)
-    color = db.Column(db.String(50), nullable=False)
+    size = db.Column(db.String(200), nullable=False)
+    color = db.Column(db.String(200), nullable=False)
     price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     seller_id = db.Column(db.Integer, nullable=False)
@@ -51,20 +51,10 @@ class ProductVariant(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
 
 
-class Buyer(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(200), nullable=False)
-    is_seller = db.Column(db.Boolean, default=False)
-    shop_name = db.Column(db.String(100), nullable=True)
-    area = db.Column(db.String(200), nullable=True)
-
-
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    buyer_id = db.Column(db.Integer, db.ForeignKey("buyer.id"), nullable=False)
-    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    buyer_id = db.Column(db.Integer, nullable=False)
+    product_id = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(50), nullable=False, default="pending")
     quantity = db.Column(db.Integer, nullable=False)
     size = db.Column(db.String(50), nullable=True)
@@ -80,35 +70,12 @@ def home():
     return "Welcome to your marketplace!"
 
 
-@app.route("/sellers/register", methods=["POST"])
-def register_seller():
-    data = request.get_json()
-    hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
-    new_seller = Seller(
-        name=data["name"],
-        shop_name=data["shop_name"],
-        area=data["area"],
-        email=data["email"],
-        password=hashed_password
-    )
-    db.session.add(new_seller)
-    db.session.commit()
-    return jsonify({"message": "Seller registered successfully!"})
-
-
-@app.route("/sellers/login", methods=["POST"])
-def login_seller():
-    data = request.get_json()
-    seller = Seller.query.filter_by(email=data["email"]).first()
-    if seller and bcrypt.check_password_hash(seller.password, data["password"]):
-        token = create_access_token(identity=str(seller.id))
-        return jsonify({"token": token})
-    return jsonify({"message": "Invalid email or password"}), 401
-
-
 @app.route("/buyers/register", methods=["POST"])
 def register_buyer():
     data = request.get_json()
+    existing = Buyer.query.filter_by(email=data["email"]).first()
+    if existing:
+        return jsonify({"message": "Email already registered"}), 400
     hashed_password = bcrypt.generate_password_hash(data["password"]).decode("utf-8")
     new_buyer = Buyer(
         name=data["name"],
@@ -175,7 +142,6 @@ def add_product():
         return jsonify({"message": "Seller account required"}), 403
 
     data = request.get_json()
-
     new_product = Product(
         name=data["name"],
         category=data["category"],
@@ -246,9 +212,9 @@ def search_products():
     if search_term:
         query = query.filter(Product.name.like(f"%{search_term}%"))
     if color:
-        query = query.filter(Product.color == color)
+        query = query.filter(Product.color.like(f"%{color}%"))
     if size:
-        query = query.filter(Product.size == size)
+        query = query.filter(Product.size.like(f"%{size}%"))
     if category:
         query = query.filter(Product.category == category)
     if gender:
@@ -261,7 +227,7 @@ def search_products():
     products = query.all()
 
     if not products:
-        return jsonify({"message": "No products found"}), 404
+        return jsonify([])
 
     result = []
     for product in products:
@@ -283,32 +249,6 @@ def search_products():
             "price": product.price,
             "quantity": product.quantity,
             "shop_name": seller.shop_name if seller else "Unknown",
-            "variants": variants
-        })
-    return jsonify(result)
-
-
-@app.route("/sellers/<int:seller_id>/products")
-def get_seller_products(seller_id):
-    products = Product.query.filter_by(seller_id=seller_id).all()
-    result = []
-    for product in products:
-        variants = []
-        for v in product.variants:
-            variants.append({
-                "color": v.color,
-                "size": v.size,
-                "quantity": v.quantity
-            })
-        result.append({
-            "id": product.id,
-            "name": product.name,
-            "category": product.category,
-            "gender": product.gender,
-            "size": product.size,
-            "color": product.color,
-            "price": product.price,
-            "quantity": product.quantity,
             "variants": variants
         })
     return jsonify(result)
@@ -360,7 +300,6 @@ def place_order():
     selected_color = data.get("color")
     order_quantity = data["quantity"]
 
-    # Check variant quantity if variants exist
     if product.variants:
         variant = ProductVariant.query.filter_by(
             product_id=product.id,
@@ -420,11 +359,26 @@ def update_order_status(order_id):
         return jsonify({"message": "Order not found"}), 404
     product = Product.query.get(order.product_id)
     if str(product.seller_id) != str(seller_id):
-        return jsonify({"message": "Not authorized to update this order"}), 403
+        return jsonify({"message": "Not authorized"}), 403
     data = request.get_json()
     order.status = data["status"]
     db.session.commit()
     return jsonify({"message": "Order status updated successfully!"})
+
+
+@app.route("/sellers/register", methods=["POST"])
+def register_seller():
+    return jsonify({"message": "Please use /buyers/register and then /become-seller"}), 400
+
+
+@app.route("/sellers/login", methods=["POST"])
+def login_seller():
+    data = request.get_json()
+    buyer = Buyer.query.filter_by(email=data["email"]).first()
+    if buyer and bcrypt.check_password_hash(buyer.password, data["password"]):
+        token = create_access_token(identity=str(buyer.id))
+        return jsonify({"token": token})
+    return jsonify({"message": "Invalid email or password"}), 401
 
 
 if __name__ == "__main__":
