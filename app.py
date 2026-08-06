@@ -4,6 +4,8 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import os
 from datetime import timedelta
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 
@@ -14,6 +16,12 @@ if database_url.startswith("postgres://"):
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "fallback-secret")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=30)
+
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.environ.get("CLOUDINARY_API_KEY"),
+    api_secret=os.environ.get("CLOUDINARY_API_SECRET")
+)
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -379,6 +387,30 @@ def login_seller():
         token = create_access_token(identity=str(buyer.id))
         return jsonify({"token": token})
     return jsonify({"message": "Invalid email or password"}), 401
+
+@app.route("/upload-reel", methods=["POST"])
+@jwt_required()
+def upload_reel():
+    user_id = get_jwt_identity()
+    buyer = Buyer.query.get(user_id)
+    if not buyer or not buyer.is_seller:
+        return jsonify({"message": "Seller account required"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"message": "No file provided"}), 400
+
+    file = request.files['file']
+    
+    result = cloudinary.uploader.upload(
+        file,
+        resource_type="video",
+        folder="z-commerce/reels"
+    )
+    
+    return jsonify({
+        "url": result["secure_url"],
+        "public_id": result["public_id"]
+    })
 
 
 if __name__ == "__main__":
