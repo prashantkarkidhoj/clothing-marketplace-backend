@@ -48,6 +48,7 @@ class Product(db.Model):
     price = db.Column(db.Float, nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     seller_id = db.Column(db.Integer, nullable=False)
+    video_url = db.Column(db.String(500), nullable=True)
     variants = db.relationship("ProductVariant", backref="product", lazy=True)
 
 
